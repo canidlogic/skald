@@ -141,11 +141,11 @@ The STF body begins at the line that immediately follows the blank line ending t
 2. Control segments
 3. Paragraph segments
 
-A __gap segment__ is a sequence of one or more blank lines.  A __blank line__ is a line that is empty or that contains nothing other than tabs and spaces.
+A __gap segment__ is a sequence of one or more blank lines.  A __blank line__ is a line that is empty or that contains nothing other than tabs and spaces.  Gaps are used to separate individual paragraph segments from each other.  They can optionally be used anywhere else in the body, except in the middle of paragraph segments.  Gaps have no meaning except when they are separating paragraphs from each other.
 
 A __control segment__ is a line that begins with a `@` or `#` or `^` or `>` symbol.  A control segment that begins with `@` marks the beginning of a chapter.  This is followed by optional whitespace and then the chapter title.  There is no automatic numbering, so if chapters should be numbered, the chapter number should be included in the chapter title somewhere.  For example:
 
-    @ Chapter I: A dark and stormy night
+    @ CHAPTER III: The Night Shadows
 
 Chapter control segments may only be used if the STF signature line in the header indicated the `chapter` format, in which case they are required.  There must be at least one declared chapter in the `chapter` format, and no paragraph segment or any other kind of control segment may occur until there has been at least one chapter control segment.  For the `short` format, no chapter control segments may appear.
 
@@ -164,7 +164,56 @@ Control segments that begin with `^` are followed by optional whitespace and the
 
 Control segments that begin with `^` _must_ be followed immediately by a control segment that begins with `>`.  The `>` control segment may only be used immediately after a `^` control segment.  The `>` control segment is followed by optional whitespace and then a brief textual name for the illustration.  Do _not_ depend on this textual name being included as a visible caption.  Instead, this is intended for things like alt-text for images and for generating indexes of images.
 
+Image declarations may be used in both `short` and `chapter` format.  In `chapter` format, a chapter control segment must appear somewhere before the image declaration so that each declared image is part of a specific chapter.
+
 Example image declaration:
 
     ^ images/example.jpg
     > This is an example image
+
+A __paragraph segment__ is a sequence of one or more lines that are not blank and that do not begin with one of the four symbols (`@#^>`) that can begin a control segment line.  Lines that begin with whitespace followed by one of the four control segment symbols are still counted as paragraph lines, because control segment lines may not begin with whitespace.  Paragraphs are separated from each other either by gaps or intervening control segments.
+
+For paragraph segments that are composed of more than one line in the input STF file, the paragraph will be rendered as one single line in the output MIME-based transport.  Each line after the first is appended to the end of the line preceding it, trimming any trailing tabs and spaces from the end of each line, and changing the line break between them to a single space.  Paragraphs in the output MIME-based transport will be separated from each other with a single blank line.
+
+For example, consider the following three paragraph segments in the STF input, which are written across nine lines in the STF file:
+
+    1 | "What passenger?"
+    2 |
+    3 | "Mr. Jarvis Lorry."
+    4 |
+    5 | Our booked passenger showed
+    6 | in a moment that it was his
+    7 | name. The guard, the coachman,
+    8 | and the other two passengers
+    9 | eyed him distrustfully.
+
+In the output MIME-based transport, this will be rendered on five lines:
+
+    1 | "What passenger?"
+    2 |
+    3 | "Mr. Jarvis Lorry."
+    4 |
+    5 | Our booked passenger showed in a moment that it was his name.
+      | The guard, the coachman, and the other two passengers eyed him
+      | distrustfully.
+
+(The whole content might still have some transfer encoding applied to it in the MIME-based transport, such as base-64.  That is not shown in the above example.)
+
+Within paragraph segments, the `*` asterisk symbol has special meaning as a markup character.  Each paragraph segment starts off with text in a regular style.  Each time a `*` symbol is encountered, the style toggles between regular style and italic style.  However, if two asterisks appear in a row `**` this is taken as an escape code for a single, literal `*` character rather than toggling between regular and italic style.  Even if one paragraph segment ends in italic style, the next paragraph segment will start in regular style again.
+
+For example, consider the following sentence in the STF input:
+
+    "What's *he* got to do with the case?" asked the man
+    he had spoken with.
+
+This should be rendered with the word "he" italic, as follows:
+
+> "What's _he_ got to do with the case?" asked the man he had spoken with.
+
+On the other hand, consider the following line in STF input:
+
+    2 ** *x* = 12
+
+This should be rendered as follows:
+
+> 2 * _x_ = 12
