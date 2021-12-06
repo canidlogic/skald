@@ -143,7 +143,7 @@ The STF body begins at the line that immediately follows the blank line ending t
 
 A __gap segment__ is a sequence of one or more blank lines.  A __blank line__ is a line that is empty or that contains nothing other than tabs and spaces.
 
-A __control segment__ is a line that begins with `@` or `#` or `^` or `?` that is _not_ followed by another instance of the same symbol.  A control segment that begins with `@` marks the beginning of a chapter.  This is followed by optional whitespace and then the chapter title.  There is no automatic numbering, so if chapters should be numbered, the chapter number should be included in the chapter title somewhere.  For example:
+A __control segment__ is a line that begins with a `@` or `#` or `^` or `>` symbol.  A control segment that begins with `@` marks the beginning of a chapter.  This is followed by optional whitespace and then the chapter title.  There is no automatic numbering, so if chapters should be numbered, the chapter number should be included in the chapter title somewhere.  For example:
 
     @ Chapter I: A dark and stormy night
 
@@ -162,9 +162,9 @@ Control segments that begin with `^` are followed by optional whitespace and the
     ----------------+--------------------------------------------------
          .svg       | Scalable Vector Graphics 1.1 (SVG)
 
-Control segments that begin with `^` _must_ be followed immediately by a control segment that begins with `?`.  The `?` control segment may only be used immediately after a `^` control segment.  The `?` control segment is followed by optional whitespace and then a brief textual name for the illustration.  Do _not_ depend on this textual name being included as a visible caption.  Instead, this is intended for things like alt-text for images and for generating indexes of images.
+Control segments that begin with `^` _must_ be followed immediately by a control segment that begins with `>`.  The `>` control segment may only be used immediately after a `^` control segment.  The `>` control segment is followed by optional whitespace and then a brief textual name for the illustration.  Do _not_ depend on this textual name being included as a visible caption.  Instead, this is intended for things like alt-text for images and for generating indexes of images.
 
 Example image declaration:
 
     ^ images/example.jpg
-    ? This is an example image
+    > This is an example image
