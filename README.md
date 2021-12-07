@@ -215,3 +215,42 @@ On the other hand, consider the following line in STF input:
 This should be rendered as follows:
 
 > 2 * _x_ = 12
+
+## MIME transport format
+
+In the MIME transport format, the whole story is represented as if it were an email with attachments.  This is not intended to be an actual email, though, so the mailing fields are ignored.  Encoders are recommended to use safe placeholder values for the mailing fields, such as the following:
+
+    From: author@example.com
+    To: publisher@example.com
+    Subject: skald
+
+Skald decoders will ignore these fields.
+
+The story shall be assembled into a sequence of elements in a `multipart/mixed` MIME message.  The first element will always be of the `application/json` type in UTF-8 encoding.  The top-level JSON element is a JSON object with a property named `stf` that has a string value of either `short` or `chapter`, and a property named `meta` that has an object value that maps metadata keys from the STF header to their values.  Most metadata values are strings, except `mailing` is an array of strings representing each line of the mailing address, and "creator" and "contributor" are arrays of elements representing people, where each of these elements is a subarray of three strings giving the role code, the author name, and the author sorted name.  The names of the metadata keys are always transformed into lowercase in this JSON object.  For example:
+
+    {
+      "stf": "chapter",
+      "meta": {
+        "title": "A Tale of Two Cities: A Story of the French Revolution",
+        "creator": [
+          ["aut", "Charles Dickens", "Dickens, Charles"]
+        ],
+        "unique-url": "http://www.example.com/classic/dickens/two-cities"
+      }
+    }
+
+It is recommended that this JSON part use transfer coding of quoted-printable to support Unicode and potentially long lines.
+
+If the story contains no embedded pictures, then the entire story text will be contained in a `text/plain` part that follows the opening JSON part.  Otherwise, the remainder is a sequence of interleaved `text/plain` parts with image attachments at the appropriate points.
+
+The `text/plain` parts are encoded such that each line is a separate record, and the first symbol of a line indicates the type of line.  There are three types of lines:
+
+     Opening symbol |   Meaning
+    ================+==============
+           >        | Paragraph
+           @        | Chapter
+           #        | Scene change
+
+The `@` and `#` symbols map to the control segments in the STF source file with those symbols.  However, no whitespace is allowed between the symbol and the chapter title for `@`, nor is trailing whitespace allowed.  Furthermore, `#` must appear alone on its line.  Each line should end with a line break (LF or CR+LF), including the last line.  For paragraphs, `>` should be prefixed without any whitespace between it and the start of the paragraph, and the whole paragraph must be on a single line.
+
+Text sections should have a transfer coding of either quoted-printable or base-64.  Note that the requirement that paragraphs be all on a single line means that the line length constraint would be a problem, which is why the transfer coding should be used even if there is no Unicode.
