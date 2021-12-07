@@ -173,7 +173,7 @@ Example image declaration:
 
 A __paragraph segment__ is a sequence of one or more lines that are not blank and that do not begin with one of the four symbols (`@#^>`) that can begin a control segment line.  Lines that begin with whitespace followed by one of the four control segment symbols are still counted as paragraph lines, because control segment lines may not begin with whitespace.  Paragraphs are separated from each other either by gaps or intervening control segments.
 
-For paragraph segments that are composed of more than one line in the input STF file, the paragraph will be rendered as one single line in the output MIME-based transport.  Each line after the first is appended to the end of the line preceding it, trimming any trailing tabs and spaces from the end of each line, and changing the line break between them to a single space.  Paragraphs in the output MIME-based transport will be separated from each other with a single blank line.
+For paragraph segments that are composed of more than one line in the input STF file, the paragraph will be rendered as one single line in the output MIME-based transport.  Each line after the first is appended to the end of the line preceding it, trimming any trailing tabs and spaces from the end of each line, and changing the line break between them to a single space.  In the output MIME-based transport, each paragraph is on its own line and each paragraph line begins with a `>` symbol.
 
 For example, consider the following three paragraph segments in the STF input, which are written across nine lines in the STF file:
 
@@ -187,13 +187,11 @@ For example, consider the following three paragraph segments in the STF input, w
     8 | and the other two passengers
     9 | eyed him distrustfully.
 
-In the output MIME-based transport, this will be rendered on five lines:
+In the output MIME-based transport, this will be rendered on three lines:
 
-    1 | "What passenger?"
-    2 |
-    3 | "Mr. Jarvis Lorry."
-    4 |
-    5 | Our booked passenger showed in a moment that it was his name.
+    1 | >"What passenger?"
+    2 | >"Mr. Jarvis Lorry."
+    3 | >Our booked passenger showed in a moment that it was his name.
       | The guard, the coachman, and the other two passengers eyed him
       | distrustfully.
 
