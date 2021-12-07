@@ -81,6 +81,30 @@ my %meta_dict;
 # Local functions
 # ===============
 
+# @@TODO:
+sub para_segment {
+  # @@TODO:
+  print "para $_[0]\n";
+}
+
+# @@TODO:
+sub chapter_segment {
+  # @@TODO:
+  print "chapter $_[0]\n";
+}
+
+# @@TODO:
+sub scene_segment {
+  # @@TODO:
+  print "scene\n";
+}
+
+# @@TODO:
+sub pic_segment {
+  # @@TODO:
+  print "pic $_[0] $_[1]\n";
+}
+
 # Check that the role for a creator or contributor declaration is valid.
 #
 # The role must be exactly three ASCII letters and must be a
@@ -748,6 +772,129 @@ while (<STDIN>) {
 # Generate the JSON metadata part
 #
 my $json_str = gen_json();
+
+# @@TODO:
+
+# Handle all the paragraph and control segments that are present in the
+# rest of the STF input
+#
+my $has_para = 0;
+my $para_buf;
+while (<STDIN>) {
+  
+  # Increase line count
+  $line_count++;
+  
+  # Check what type of line this is
+  if (/^[ \t\r\n]*$/u) {
+    # Gap, so just flush the paragraph buffer if it is filled but do
+    # nothing more
+    if ($has_para) {
+      para_segment($para_buf);
+      $has_para = 0;
+      $para_buf = '';
+    }
+    
+  } elsif (/^@/u) {
+    # Chapter declaration, so first flush the paragraph buffer if it is
+    # filled
+    if ($has_para) {
+      para_segment($para_buf);
+      $has_para = 0;
+      $para_buf = '';
+    }
+    
+    # Trim trailing whitespace and line break
+    s/[ \t\r\n]+$//u;
+    
+    # Parse the line to get the chapter title
+    (/^@[ \t]*(.+)$/u) or
+      die "STF line $line_count: invalid chapter declaration, stopped";
+    my $chapter_title = $1;
+    
+    # Handle the chapter segment
+    chapter_segment($chapter_title);
+    
+  } elsif (/^#/u) {
+    # Scene change declaration, so first flush the paragraph buffer if
+    # it is filled
+    if ($has_para) {
+      para_segment($para_buf);
+      $has_para = 0;
+      $para_buf = '';
+    }
+    
+    # Check that line is proper format
+    (/^#[ \t\r\n]*$/u) or
+      die "STF line $line_count: invalid scene change, stopped";
+    
+    # Handle the scene change segment
+    scene_segment();
+    
+  } elsif (/^\^/u) {
+    # Picture declaration, so first flush the paragraph buffer if it is
+    # filled
+    if ($has_para) {
+      para_segment($para_buf);
+      $has_para = 0;
+      $para_buf = '';
+    }
+    
+    # Trim trailing whitespace and line break
+    s/[ \t\r\n]+$//u;
+    
+    # Parse the line to get the image path
+    (/^\^[ \t]*(.+)$/u) or
+      die "STF line $line_count: invalid image declaration, stopped";
+    my $image_path = $1;
+    
+    # This segment must be followed immediately by a > segment
+    ($_ = <STDIN>) or
+      die "STF line $line_count: missing > after ^ image, stopped";
+    $line_count++;
+    
+    # Trim trailing whitespace and line break
+    s/[ \t\r\n]+$//u;
+    
+    # Parse the caption line
+    (/^>[ \t]*(.+)$/u) or
+      die "STF line $line_count: expecting valid caption line, stopped";
+    my $image_cap = $1;
+    
+    # Handle the picture segments
+    pic_segment($image_path, $image_cap);
+    
+  } elsif (/^>/u) {
+    # The > command segment shouldn't happen except immediately after
+    # the ^ command, which consumes it, so this is an error
+    die "STF line $line_count: > only allowed after ^ command, stopped";
+    
+  } else {
+    # If it fits in none of the above cases, it is part of a paragraph;
+    # begin by initializing paragraph buffer if not yet initialized
+    unless ($has_para) {
+      $has_para = 1;
+      $para_buf = '';
+    }
+    
+    # Trim trailing whitespace and line break
+    s/[ \t\r\n]+$//u;
+    
+    # If paragraph buffer is not empty, insert a space
+    if (length $para_buf > 0) {
+      $para_buf = $para_buf . " ";
+    }
+    
+    # Append the current line
+    $para_buf = $para_buf . $_;
+  }
+}
+if ($has_para) {
+  # Still have a buffered paragraph to process
+  para_segment($para_buf);
+  $has_para = 0;
+  $para_buf = '';
+}
 
 # @@TODO:
 
