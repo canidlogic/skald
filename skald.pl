@@ -116,6 +116,10 @@ my $text_open = 0;
 my $text_fh;
 my $text_path;
 
+# Track whether the first chapter has been declared yet.
+#
+my $has_chapter = 0;
+
 # ===============
 # Local functions
 # ===============
@@ -133,6 +137,12 @@ sub para_segment {
   # Get parameter and set type
   my $str = shift;
   $str = "$str";
+  
+  # If we are in chapter format, check that a chapter is open
+  if ($stf_format eq 'chapter') {
+    ($has_chapter) or
+      die "Must open chapter at beginning of text, stopped";
+  }
   
   # If text file buffer not open, open a new text file buffer and set
   # UTF-8
@@ -162,6 +172,13 @@ sub chapter_segment {
   my $str = shift;
   $str = "$str";
   
+  # Check that we are in chapter mode
+  ($stf_format eq 'chapter') or
+    die "Can't use chapter command unless in chapter format, stopped";
+  
+  # Set chapter flag
+  $has_chapter = 1;
+  
   # If text file buffer not open, open a new text file buffer and set
   # UTF-8
   unless ($text_open) {
@@ -182,6 +199,12 @@ sub chapter_segment {
 sub scene_segment {
   # Check parameter count
   ($#_ == -1) or die "Wrong number of parameters, stopped";
+  
+  # If we are in chapter format, check that a chapter is open
+  if ($stf_format eq 'chapter') {
+    ($has_chapter) or
+      die "Must open chapter at beginning of text, stopped";
+  }
   
   # If text file buffer not open, open a new text file buffer and set
   # UTF-8
@@ -215,6 +238,12 @@ sub pic_segment {
   
   $arg_path = "$arg_path";
   $arg_cap  = "$arg_cap";
+  
+  # If we are in chapter format, check that a chapter is open
+  if ($stf_format eq 'chapter') {
+    ($has_chapter) or
+      die "Must open chapter at beginning of text, stopped";
+  }
   
   # If text file buffer not open, open a new text file buffer and set
   # UTF-8
