@@ -109,28 +109,135 @@ my $mime_top = MIME::Entity->build(
                       Subject  => "skald",
                       Encoding => "7bit");
 
+# Text file that is currently accepting lines of text, if there is one
+# open.
+#
+my $text_open = 0;
+my $text_fh;
+my $text_path;
+
 # ===============
 # Local functions
 # ===============
 
-# @@TODO:
+# Handle a paragraph segment from the input STF file.
+#
+# Parameters:
+#
+#   1 : string - the full paragraph, without any line break
+#
 sub para_segment {
-  # @@TODO:
+  # Check parameter count
+  ($#_ == 0) or die "Wrong number of parameters, stopped";
+  
+  # Get parameter and set type
+  my $str = shift;
+  $str = "$str";
+  
+  # If text file buffer not open, open a new text file buffer and set
+  # UTF-8
+  unless ($text_open) {
+    $text_open = 1;
+    ($text_fh, $text_path) = tempfile();
+    push @tfile_paths, ($text_path);
+    binmode($text_fh, ":encoding(utf8)") or
+      die "Failed to change temporary file to UTF-8, stopped";
+  }
+  
+  # Print the paragraph segment to the text file
+  print {$text_fh} ">$str\n";
 }
 
-# @@TODO:
+# Handle a chapter segment command from the input STF file.
+#
+# Parameters:
+#
+#   1 : string - the chapter name
+#
 sub chapter_segment {
-  # @@TODO:
+  # Check parameter count
+  ($#_ == 0) or die "Wrong number of parameters, stopped";
+  
+  # Get parameter and set type
+  my $str = shift;
+  $str = "$str";
+  
+  # If text file buffer not open, open a new text file buffer and set
+  # UTF-8
+  unless ($text_open) {
+    $text_open = 1;
+    ($text_fh, $text_path) = tempfile();
+    push @tfile_paths, ($text_path);
+    binmode($text_fh, ":encoding(utf8)") or
+      die "Failed to change temporary file to UTF-8, stopped";
+  }
+  
+  # Print the chapter segment to the text file
+  my $ltext = '@' . $str . "\n";
+  print {$text_fh} $ltext;
 }
 
-# @@TODO:
+# Handle a scene change command from the input STF file.
+#
 sub scene_segment {
-  # @@TODO:
+  # Check parameter count
+  ($#_ == -1) or die "Wrong number of parameters, stopped";
+  
+  # If text file buffer not open, open a new text file buffer and set
+  # UTF-8
+  unless ($text_open) {
+    $text_open = 1;
+    ($text_fh, $text_path) = tempfile();
+    push @tfile_paths, ($text_path);
+    binmode($text_fh, ":encoding(utf8)") or
+      die "Failed to change temporary file to UTF-8, stopped";
+  }
+  
+  # Print the scene change to the text file
+  print {$text_fh} "#\n";
 }
 
-# @@TODO:
+# Handle a picture segment command from the input STF file.
+#
+# Parameters:
+#
+#   1 : string - the path to the image file
+#
+#   2 : string - the caption for the image
+#
 sub pic_segment {
-  # @@TODO:
+  # Check parameter count
+  ($#_ == 1) or die "Wrong number of parameters, stopped";
+  
+  # Get parameters and set types
+  my $arg_path = shift;
+  my $arg_cap  = shift;
+  
+  $arg_path = "$arg_path";
+  $arg_cap  = "$arg_cap";
+  
+  # If text file buffer not open, open a new text file buffer and set
+  # UTF-8
+  unless ($text_open) {
+    $text_open = 1;
+    ($text_fh, $text_path) = tempfile();
+    push @tfile_paths, ($text_path);
+    binmode($text_fh, ":encoding(utf8)") or
+      die "Failed to change temporary file to UTF-8, stopped";
+  }
+  
+  # Print the caption to the text file to introduce the image
+  print {$text_fh} "^$arg_cap\n";
+  
+  # Close the text file and attach it to the MIME message
+  close($text_fh);
+  $text_open = 0;
+  $mime_top->attach(Path => $text_path,
+                    Type => "text/plain;charset=UTF-8",
+                    Encoding => "quoted-printable");
+  # @@TODO: change encoding to base64
+  
+  # @@TODO: attach image
 }
 
 # Check that the role for a creator or contributor declaration is valid.
@@ -722,7 +829,7 @@ sub gen_json {
 # Set standard input to use UTF-8
 #
 binmode(STDIN, ":encoding(utf8)") or
-    die "Failed to change standard input to UTF-8, stopped";
+  die "Failed to change standard input to UTF-8, stopped";
 
 # Read and parse the signature line
 #
@@ -808,7 +915,7 @@ my $json_path;
 push @tfile_paths, ($json_path);
 
 binmode($json_fh, ":encoding(utf8)") or
-    die "Failed to change temporary file to UTF-8, stopped";
+  die "Failed to change temporary file to UTF-8, stopped";
 
 print {$json_fh} $json_str;
 close($json_fh);
@@ -939,6 +1046,18 @@ if ($has_para) {
   para_segment($para_buf);
   $has_para = 0;
   $para_buf = '';
+}
+
+# If buffered text file is open, close it and attach it to the MIME
+# message
+#
+if ($text_open) {
+  close($text_fh);
+  $text_open = 0;
+  $mime_top->attach(Path => $text_path,
+                    Type => "text/plain;charset=UTF-8",
+                    Encoding => "quoted-printable");
+  # @@TODO: change encoding to base64
 }
 
 # Print the whole MIME message to standard output
