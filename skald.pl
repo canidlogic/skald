@@ -234,8 +234,7 @@ sub pic_segment {
   $text_open = 0;
   $mime_top->attach(Path => $text_path,
                     Type => "text/plain;charset=UTF-8",
-                    Encoding => "quoted-printable");
-  # @@TODO: change encoding to base64
+                    Encoding => "base64");
   
   # @@TODO: attach image
 }
@@ -1056,8 +1055,7 @@ if ($text_open) {
   $text_open = 0;
   $mime_top->attach(Path => $text_path,
                     Type => "text/plain;charset=UTF-8",
-                    Encoding => "quoted-printable");
-  # @@TODO: change encoding to base64
+                    Encoding => "base64");
 }
 
 # Print the whole MIME message to standard output
