@@ -52,6 +52,7 @@ The metadata value is any sequence of Unicode codepoints encoded in UTF-8, with 
 1. Each value within a metadata or continuation line must have at least one codepoint that is not a space or tab.
 2. Neither the first nor last codepoint of a value within a metadata or continuation line may be space or tab.
 3. CR and LF may never appear within a value.
+4. _Exception:_ a metadata line may appear with no value if it is followed by at least one continuation line.
 
 Note that this syntax does not allow blank or empty values.
 
@@ -216,6 +217,8 @@ This should be rendered as follows:
 
 > 2 * _x_ = 12
 
+The asterisk markup is copied in the MIME format exactly as it was in the STF file. 
+
 ## MIME transport format
 
 In the MIME transport format, the whole story is represented as if it were an email with attachments.  This is not intended to be an actual email, though, so the mailing fields are ignored.  Encoders are recommended to use safe placeholder values for the mailing fields, such as the following:
@@ -226,7 +229,7 @@ In the MIME transport format, the whole story is represented as if it were an em
 
 Skald decoders will ignore these fields.
 
-The story shall be assembled into a sequence of elements in a `multipart/mixed` MIME message.  The first element will always be of the `application/json` type in UTF-8 encoding.  The top-level JSON element is a JSON object with a property named `stf` that has a string value of either `short` or `chapter`, and a property named `meta` that has an object value that maps metadata keys from the STF header to their values.  Most metadata values are strings, except `mailing` is an array of strings representing each line of the mailing address, and "creator" and "contributor" are arrays of elements representing people, where each of these elements is a subarray of three strings giving the role code, the author name, and the author sorted name.  The names of the metadata keys are always transformed into lowercase in this JSON object.  For example:
+The story shall be assembled into a sequence of parts in a `multipart/mixed` MIME message.  The first part will always be of the `application/json` type in UTF-8 encoding.  The top-level JSON element is a JSON object with a property named `stf` that has a string value of either `short` or `chapter`, and a property named `meta` that has an object value that maps metadata keys from the STF header to their values.  Most metadata values are strings, except `mailing` is an array of strings representing each line of the mailing address, and "creator" and "contributor" are arrays of elements representing people, where each of these elements is a subarray of three strings giving the role code, the author name, and the author sorted name.  The names of the metadata keys are always transformed into lowercase in this JSON object.  For example:
 
     {
       "stf": "chapter",
@@ -243,14 +246,17 @@ It is recommended that this JSON part use transfer coding of quoted-printable to
 
 If the story contains no embedded pictures, then the entire story text will be contained in a `text/plain` part that follows the opening JSON part.  Otherwise, the remainder is a sequence of interleaved `text/plain` parts with image attachments at the appropriate points.
 
-The `text/plain` parts are encoded such that each line is a separate record, and the first symbol of a line indicates the type of line.  There are three types of lines:
+The `text/plain` parts are encoded such that each line is a separate record, and the first symbol of a line indicates the type of line.  There are four types of lines:
 
      Opening symbol |   Meaning
     ================+==============
            >        | Paragraph
+           ^        | Caption
            @        | Chapter
            #        | Scene change
 
 The `@` and `#` symbols map to the control segments in the STF source file with those symbols.  However, no whitespace is allowed between the symbol and the chapter title for `@`, nor is trailing whitespace allowed.  Furthermore, `#` must appear alone on its line.  Each line should end with a line break (LF or CR+LF), including the last line.  For paragraphs, `>` should be prefixed without any whitespace between it and the start of the paragraph, and the whole paragraph must be on a single line.
+
+Each embedded image must be preceded by a plain-text part, and the last line in the plain-text part must be a caption line.  This caption line is then associated with the image that follows it.  The caption line may only occur as the last line in a text block, and it must always appear before an image embedded in the MIME message.
 
 Text sections should have a transfer coding of either quoted-printable or base-64.  Note that the requirement that paragraphs be all on a single line means that the line length constraint would be a problem, which is why the transfer coding should be used even if there is no Unicode.
