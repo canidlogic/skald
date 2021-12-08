@@ -236,7 +236,29 @@ sub pic_segment {
                     Type => "text/plain;charset=UTF-8",
                     Encoding => "base64");
   
-  # @@TODO: attach image
+  # Determine MIME image type from the file path
+  my $image_type;
+  if (($arg_path =~ /.jpg$/ui) or ($arg_path =~ /.jpeg$/ui)) {
+    $image_type = "image/jpeg";
+  
+  } elsif ($arg_path =~ /.png$/ui) {
+    $image_type = "image/png";
+    
+  } elsif ($arg_path =~ /.svg$/ui) {
+    $image_type = "image/svg+xml";
+    
+  } else {
+    die "Unrecognized image file extension for '$arg_path', stopped";
+  }
+  
+  # Make sure file exists
+  (-f $arg_path) or
+    die "Failed to file image file '$arg_path', stopped";
+  
+  # Attach the image file to the MIME message
+  $mime_top->attach(Path     => $arg_path,
+                    Type     => $image_type,
+                    Encoding => "base64");
 }
 
 # Check that the role for a creator or contributor declaration is valid.
