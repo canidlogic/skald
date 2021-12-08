@@ -3,6 +3,12 @@ use strict;
 use feature 'unicode_strings';
 use warnings FATAL => "utf8";
 
+# Core modules
+use File::Temp qw(tempfile);
+
+# Non-core modules
+use MIME::Entity;
+
 =head1 NAME
 
 skald.pl - Serialize a Skald Text Format (STF) file into a Skald-style
@@ -77,6 +83,32 @@ my $stf_format;
 #
 my %meta_dict;
 
+# List of generated temporary file paths.
+#
+# There is a destructor block that runs at the end of the script that
+# unlinks each of these files.
+#
+my @tfile_paths;
+END {
+  unlink(@tfile_paths);
+}
+
+# The top-level MIME entity that we will use to build the message.
+#
+# We initialize it here with the mailing parameters set to dummy values
+# and the type set to multipart/mixed.  Attachments will then be added
+# while the script is running.
+#
+# We also declare that the MIME entity will be 7-bit clean and not have
+# overly long lines (we will encode attachments).
+#
+my $mime_top = MIME::Entity->build(
+                      Type     => "multipart/mixed",
+                      From     => 'author@example.com',
+                      To       => 'publisher@example.com',
+                      Subject  => "skald",
+                      Encoding => "7bit");
+
 # ===============
 # Local functions
 # ===============
@@ -84,25 +116,21 @@ my %meta_dict;
 # @@TODO:
 sub para_segment {
   # @@TODO:
-  print "para $_[0]\n";
 }
 
 # @@TODO:
 sub chapter_segment {
   # @@TODO:
-  print "chapter $_[0]\n";
 }
 
 # @@TODO:
 sub scene_segment {
   # @@TODO:
-  print "scene\n";
 }
 
 # @@TODO:
 sub pic_segment {
   # @@TODO:
-  print "pic $_[0] $_[1]\n";
 }
 
 # Check that the role for a creator or contributor declaration is valid.
@@ -745,7 +773,6 @@ while (<STDIN>) {
     }
   }
   
-  
   # If this line is blank or empty, we are done
   if (/^[ \t\r\n]*$/u) {
     $header_ended = 1;
@@ -773,7 +800,25 @@ while (<STDIN>) {
 #
 my $json_str = gen_json();
 
-# @@TODO:
+# Write the JSON metadata to a temporary file and close the file
+#
+my $json_fh;
+my $json_path;
+($json_fh, $json_path) = tempfile();
+push @tfile_paths, ($json_path);
+
+binmode($json_fh, ":encoding(utf8)") or
+    die "Failed to change temporary file to UTF-8, stopped";
+
+print {$json_fh} $json_str;
+close($json_fh);
+
+# Attach the JSON metadata file to the MIME message; there is no charset
+# parameter for the JSON mimetype
+#
+$mime_top->attach(Path     => $json_path,
+                  Type     => "application/json",
+                  Encoding => "quoted-printable");
 
 # Handle all the paragraph and control segments that are present in the
 # rest of the STF input
@@ -896,7 +941,9 @@ if ($has_para) {
   $para_buf = '';
 }
 
-# @@TODO:
+# Print the whole MIME message to standard output
+#
+$mime_top->print(\*STDOUT);
 
 =head1 AUTHOR
 
