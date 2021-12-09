@@ -76,6 +76,46 @@ Skald::Parse - Parse through a Skald message in MIME transport format.
 
 =cut
 
+# =========
+# Constants
+# =========
+
+# Hash that maps all recognized person roles to the value one.
+#
+# All roles given here are in lowercase.
+#
+my %role_codes = (
+  adp => 1,
+  ann => 1,
+  arr => 1,
+  art => 1,
+  asn => 1,
+  aut => 1,
+  aqt => 1,
+  aft => 1,
+  aui => 1,
+  ant => 1,
+  bkp => 1,
+  clb => 1,
+  cmm => 1,
+  dsr => 1,
+  edt => 1,
+  ill => 1,
+  lyr => 1,
+  mdc => 1,
+  mus => 1,
+  nrt => 1,
+  oth => 1,
+  pht => 1,
+  prt => 1,
+  red => 1,
+  rev => 1,
+  spn => 1,
+  ths => 1,
+  trc => 1,
+  trl => 1
+);
+
 # ========================================
 # MIME message parsing temporary directory
 # ========================================
@@ -98,6 +138,216 @@ my $mime_dir = tempdir(CLEANUP => 1);
 #
 my $mime_parse = MIME::Parser->new;
 $mime_parse->output_under($mime_dir);
+
+# ======================
+# Local static functions
+# ======================
+
+# Check that the role for a creator or contributor declaration is valid.
+#
+# The role must be exactly three ASCII letters and must be a
+# case-insensitive match for one of the recognized role codes.
+#
+# Parameters:
+#
+#   1 : string - the role code to check
+#
+# Return:
+#
+#   1 if valid, 0 if not
+#
+sub check_role {
+  # Should have exactly one argument
+  ($#_ == 0) or die "Wrong number of arguments, stopped";
+  
+  # Get argument and set type
+  my $str = shift;
+  $str = "$str";
+  
+  # Valid flag starts set
+  my $valid = 1;
+  
+  # Fail if string is not sequence of exactly three ASCII letters
+  unless ($str =~ /^[A-Za-z]{3}$/u) {
+    $valid = 0;
+  }
+  
+  # Fail unless lowercase version of role is in role map
+  if ($valid) {
+    unless (exists $role_codes{lc($str)}) {
+      $valid = 0;
+    }
+  }
+  
+  # Return validity
+  return $valid;
+}
+
+# Check that the given date string is valid.
+#
+# The date must be either in YYYY or YYYY-MM or YYYY-MM-DD format.  This
+# function will also verify that the field values make sense.  The
+# earliest supported date is 1582-10-15 (or 1582-10 or 1582) and the
+# latest supported date is 9999-12-31.
+#
+# Parameters:
+#
+#   1 : string - the date string to check
+#
+# Return:
+#
+#   1 if valid, 0 if not
+#
+sub check_date {
+  # Should have exactly one argument
+  ($#_ == 0) or die "Wrong number of arguments, stopped";
+  
+  # Get argument and set type
+  my $str = shift;
+  $str = "$str";
+  
+  # Valid flag starts set
+  my $valid = 1;
+  
+  # Checking depends on the specific format
+  if ($str =~ /^([0-9]{4})\-([0-9]{2})\-([0-9]{2})$/u) {
+    # Year, month, day -- get integer values
+    my $y = int($1);
+    my $m = int($2);
+    my $d = int($3);
+    
+    # Check year in range [1582, 9999]
+    unless (($y >= 1582) and ($y <= 9999)) {
+      $valid = 0;
+    }
+    
+    # For all years but 1582, check that month in range 1-12; for 1582,
+    # check that month in range 10-12
+    if ($valid) {
+      if ($y == 1582) {
+        unless (($m >= 10) and ($m <= 12)) {
+          $valid = 0;
+        }
+        
+      } else {
+        unless (($m >= 1) and ($m <= 12)) {
+          $valid = 0;
+        }
+      }
+    }
+    
+    # For all year/month combinations except 1582-10, check that day of
+    # month is at least one; for 1582-10, check that day is at least 15
+    if ($valid) {
+      if (($y == 1582) and ($m == 10)) {
+        unless ($d >= 15) {
+          $valid = 0;
+        }
+        
+      } else {
+        unless ($d >= 1) {
+          $valid = 0;
+        }
+      }
+    }
+    
+    # Check the upper limit of day depending on specific month and
+    # whether there is a leap year
+    if ($valid) {
+      if (($m == 11) or ($m == 4) or ($m == 6) or ($m == 9)) {
+        # November, April, June, September have 30 days
+        unless ($d <= 30) {
+          $valid = 0;
+        }
+        
+      } elsif ($m == 2) {
+        # February depends on whether there is a leap year -- check
+        # whether this is a leap year
+        my $is_leap = 0;
+        if (($y % 4) == 0) {
+          # Year divisible by four
+          if (($y % 100) == 0) {
+            # Year divisible by four and 100
+            if (($y % 400) == 0) {
+              # Year divisible by four and 100 and 400, so leap year
+              $is_leap = 1;
+              
+            } else {
+              # Year divisible by four and 100 but not 400, so not leap
+              # year
+              $is_leap = 0;
+            }
+            
+          } else {
+            # Year divisible by four but not by 100, so leap year
+            $is_leap = 1;
+          }
+          
+        } else {
+          # Year not divisible by four, so not a leap year
+          $is_leap = 0;
+        }
+        
+        # Check day limit depending on leap year
+        if ($is_leap) {
+          unless ($d <= 29) {
+            $valid = 0;
+          }
+          
+        } else {
+          unless ($d <= 28) {
+            $valid = 0;
+          }
+        }
+        
+      } else {
+        # All other months have 31 days
+        unless ($d <= 31) {
+          $valid = 0;
+        }
+      }
+    }
+    
+  } elsif ($str =~ /^([0-9]{4})\-([0-9]{2})$/u) {
+    # Year and month -- get integer values
+    my $y = int($1);
+    my $m = int($2);
+    
+    # Check year in range [1582, 9999]
+    unless (($y >= 1582) and ($y <= 9999)) {
+      $valid = 0;
+    }
+    
+    # For all years but 1582, check that month in range 1-12; for 1582,
+    # check that month in range 10-12
+    if ($valid) {
+      if ($y == 1582) {
+        unless (($m >= 10) and ($m <= 12)) {
+          $valid = 0;
+        }
+        
+      } else {
+        unless (($m >= 1) and ($m <= 12)) {
+          $valid = 0;
+        }
+      }
+    }
+    
+  } elsif ($str =~ /^[0-9]{4}$/u) {
+    # Year only -- get integer value and check in range [1582, 9999]
+    my $y = int($str);
+    unless (($y >= 1582) and ($y <= 9999)) {
+      $valid = 0;
+    }
+    
+  } else {
+    # Unrecognized format
+    $valid = 0;
+  }
+  
+  # Return validity
+  return $valid;
+}
 
 # ========================
 # Private instance methods
@@ -178,8 +428,101 @@ my $load_meta = sub {
   } else {
     die "Skald JSON syntax error, stopped";
   }
-     
-  # @@TODO:
+  
+  # Grab the "meta" JSON property and make sure it is a hash reference
+  $js = $js->{'meta'};
+  (ref($js) eq 'HASH') or die "Skald JSON syntax error, stopped";
+  
+  # Get a reference to our metadata dictionary
+  my $md = $self->{__PACKAGE__ . "::meta"};
+  
+  # Title and unique-URL properties are required
+  ((exists $js->{'title'}) and (exists $js->{'unique-url'})) or
+    die "Skald JSON syntax error, stopped";
+  
+  # Title and unique-URL must be scalars, convert them to strings and
+  # store them in metadata dictionary
+  my $pval = $js->{'title'};
+  (not ref($pval)) or die "Skald JSON syntax error, stopped";
+  $pval = "$pval";
+  $md->{'title'} = $pval;
+  
+  $pval = $js->{'unique-url'};
+  (not ref($pval)) or die "Skald JSON syntax error, stopped";
+  $pval = "$pval";
+  $md->{'unique-url'} = $pval;
+  
+  # For creator and contributor properties (if present), make sure they
+  # are an array of subarrays, where each subarray has exactly three 
+  # scalars, and the first scalar is a valid person role; transfer each
+  # subarray to the local metadata property dictionary, making each
+  # element a string; ignore properties if the array is empty
+  for my $pname ('creator', 'contributor') {
+    if (exists $js->{$pname}) {
+      my $ca = $js->{$pname};
+      (ref($ca) eq 'ARRAY') or die "Skald JSON syntax error, stopped";
+      if (scalar @$ca > 0) {
+        $md->{$pname} = [];
+        for my $p (@$ca) {
+          (ref($p) eq 'ARRAY') or
+            die "Skald JSON syntax error, stopped";
+          (scalar @$p == 3) or die "Skald JSON syntax error, stopped";
+          ((not ref($p->[0])) and
+              (not ref($p->[1])) and
+              (not ref($p->[2]))) or
+            die "Skald JSON syntax error, stopped";
+          (check_role($p->[0])) or
+            die "Skald JSON syntax error, stopped";
+          push @{$md->{$pname}}, ([
+              "$p->[0]", "$p->[1]", "$p->[2]"
+            ]);
+        }
+      }
+    }
+  }
+  
+  # For description, publisher, rights, email, website, and phone
+  # properties (if present), make sure they are scalar, and then
+  # transfer them in as strings
+  for my $pname (
+      'description',
+      'publisher',
+      'rights',
+      'email',
+      'website',
+      'phone') {
+    if (exists $js->{$pname}) {
+      $pval = $js->{$pname};
+      (not ref($pval)) or die "Skald JSON syntax error, stopped";
+      $md->{$pname} = "$pval";
+    }
+  }
+  
+  # For date property, if present, check its format and then copy it in
+  # as a string
+  if (exists $js->{'date'}) {
+    $pval = $js->{'date'};
+    (not ref($pval)) or die "Skald JSON syntax error, stopped";
+    $pval = "$pval";
+    (check_date($pval)) or die "Skald JSON syntax error, stopped";
+    $md->{'date'} = $pval;
+  }
+  
+  # For mailing property, if present, check that it is an array
+  # reference (ignoring it if the array is empty, and that each array
+  # element is a string, then copy it in
+  if (exists $js->{'mailing'}) {
+    my $ma = $js->{'mailing'};
+    (ref($ma) eq 'ARRAY') or die "Skald JSON syntax error, stopped";
+    if (scalar @$ma > 0) {
+      $md->{'mailing'} = [];
+      for $pval (@$ma) {
+        (not ref($pval)) or die "Skald JSON syntax error, stopped";
+        $pval = "$pval";
+        push @{$md->{'mailing'}}, ($pval);
+      }
+    }
+  }
 };
 
 =head1 CONSTRUCTORS
