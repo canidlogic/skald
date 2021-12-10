@@ -399,9 +399,6 @@ my $load_meta = sub {
   # Read the whole body into a string
   $js_body = $js_body->as_string;
   
-  # Encode into UTF-8 because JSON parser expects bytes
-  $js_body = encode("UTF-8", $js_body);
-  
   # Parse the body in JSON
   my $js = decode_json($js_body);
   
@@ -599,9 +596,163 @@ sub fromPath {
 
 =back
 
+=head1 INSTANCE METHODS
+
+=over 4
+
+=item getFormat
+
+Return the format of this Skald message as a string.  This is either the
+string value 'short' or 'chapter' the difference being that 'short'
+format may not have any chapters while 'chapter' format must start with
+a chapter declaration at the beginning.
+
 =cut
 
+sub getFormat {
+  # Check parameter count
+  ($#_ == 0) or die "Wrong number of parameters, stopped";
+  
+  # Get parameter and check type
+  my $self = shift;
+  (ref($self) and ($self->isa(__PACKAGE__))) or
+    die "Wrong self parameter, stopped";
+  
+  # Return the format parameter value
+  return $self->{__PACKAGE__ . "::format"};
+}
+
+=item hasMeta(prop_name)
+
+Check whether the given property name (case insensitive) was declared in
+the Skald metadata.  Returns 1 if so and 0 if not.
+
+=cut
+
+sub hasMeta {
+  # Check parameter count
+  ($#_ == 1) or die "Wrong number of parameters, stopped";
+  
+  # Get self parameter and check type
+  my $self = shift;
+  (ref($self) and ($self->isa(__PACKAGE__))) or
+    die "Wrong self parameter, stopped";
+  
+  # Get additional parameter
+  my $pname = shift;
+  (not ref($pname)) or die "Wrong parameter type, stopped";
+  $pname = "$pname";
+  
+  # Make parameter lowercase
+  $pname = lc($pname);
+  
+  # Check if property exists in metadata
+  my $result = 0;
+  if (exists $self->{__PACKAGE__ . "::meta"}->{$pname}) {
+    $result = 1;
+  }
+  
+  # Return result
+  return $result;
+}
+
+=item getMetaKeys()
+
+Return a list (in list context) of all metadata property keys that have
+been defined in this Skald message.  Property names will all be in
+lowercase, and are not in any particular order.
+
+=cut
+
+sub getMetaKeys {
+  # Check parameter count
+  ($#_ == 0) or die "Wrong number of parameters, stopped";
+  
+  # Get parameter and check type
+  my $self = shift;
+  (ref($self) and ($self->isa(__PACKAGE__))) or
+    die "Wrong self parameter, stopped";
+  
+  # Get the key list
+  my @klist = keys %{$self->{__PACKAGE__ . "::meta"}};
+  
+  # Return the key list
+  return @klist;
+}
+
+=item getMeta(prop_name)
+
+Return the value of the given metadata property name (case insensitive)
+from the Skald metadata.  Dies if metadata property not defined; use the
+C<hasMeta> method to check.
+
+Returns a string for everything, except the Creator, Contributor, and
+Mailing fields.  The Creator and Contributor fields return an array
+reference of subarray references, each of which has three strings -- a
+role code, an author name, and the author name in sorted order.  The
+Mailing field returns an array reference of strings, each representing a
+line of the mailing address.
+
+The function checks that all strings returned (and all strings within
+arrays returned) do not include CR or LF characters anywhere.  It also
+checks that strings within Creator and Contributor values do not include
+semicolon, so that semicolon can safely be used as a field separator.
+
+=cut
+
+sub getMeta {
+  # Check parameter count
+  ($#_ == 1) or die "Wrong number of parameters, stopped";
+  
+  # Get self parameter and check type
+  my $self = shift;
+  (ref($self) and ($self->isa(__PACKAGE__))) or
+    die "Wrong self parameter, stopped";
+  
+  # Get additional parameter
+  my $pname = shift;
+  (not ref($pname)) or die "Wrong parameter type, stopped";
+  $pname = "$pname";
+  
+  # Make parameter lowercase
+  $pname = lc($pname);
+  
+  # Check that property exists in metadata
+  (exists $self->{__PACKAGE__ . "::meta"}->{$pname}) or
+    die "Missing metadata property '$pname', stopped";
+  
+  # Get the property value
+  my $pval = $self->{__PACKAGE__ . "::meta"}->{$pname};
+  
+  # Handle the property value depending on type
+  if (($pname eq 'creator') or ($pname eq 'contributor')) {
+    # Person subarray
+    for my $p (@$pval) {
+      ((not ($p->[1] =~ /[;\r\n]/u)) and
+          (not ($p->[2] =~ /[;\r\n]/u))) or
+        die "Invalid parameter value for '$pname', stopped";
+    }
+    
+  } elsif ($pname eq 'mailing') {
+    # String array
+    for my $s (@$pval) {
+      not ($s =~ /[\r\n]/u) or
+        die "Invalid parameter value for '$pname', stopped";
+    }
+        
+  } else {
+    # Regular string parameter
+    (not ($pval =~ /[\r\n]/u)) or
+      die "Invalid parameter value for '$pname', stopped";
+  }
+  
+  # Return value
+  return $pval;
+}
+
 # @@TODO:
+
+=back
 
 =head1 AUTHOR
 
