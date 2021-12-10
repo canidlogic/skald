@@ -533,8 +533,8 @@ my $load_meta = sub {
 };
 
 # Make sure that all MIME parts after the first that have a type
-# starting with "image/" are located within files, generating temporary
-# files if necessary.
+# starting with "image/" are located within files with proper file
+# extensions, generating temporary files if necessary.
 #
 # The "ent" instance data must be already established in the object
 # instance with the parsed representation of the MIME message, but
@@ -552,9 +552,10 @@ my $load_meta = sub {
 # element is a string.  If the string is empty, it means the MIME part
 # is not an image file.  Otherwise, the string will be the path to the
 # image file on disk.  If any image files are stored in memory in the
-# parsed MIME representation, this function will generate temporary
-# files and print the data out to them so that all images are indeed
-# stored in files.
+# parsed MIME representation or are stored on disk but do not have a
+# proper file extension, this function will generate temporary files and
+# print the data out to them so that all images are indeed stored in
+# files with proper extensions.
 #
 # This function will also set a new instance data value call "tfiles"
 # which is an array of strings.  This array might be empty.  Each value
@@ -606,20 +607,69 @@ my $store_extra = sub {
     # We have an image, so get its body
     my $body = $pe->bodyhandle;
     
-    # Different handling depending whether body is in-core or not
+    # Based on image type, find an appropriate default file extension,
+    # including the dot
+    my $iext;
+    if ($pe->mime_type =~ /^image\/jpeg$/ui) {
+      $iext = ".jpg";
+      
+    } elsif ($pe->mime_type =~ /^image\/png$/ui) {
+      $iext = ".png";
+      
+    } elsif ($pe->mime_type =~ /^image\/svg\+xml$/ui) {
+      $iext = ".svg";
+      
+    } else {
+      die "Unrecognized image type, stopped";
+    }
+    
+    # If body is already a disk file, check whether it has an acceptable
+    # file extension for the type; if it does, set the $file_ok flag; in
+    # all other cases clear the $file_ok flag
+    my $file_ok = 0;
     if (defined($body->path)) {
-      # Body already is a disk file, so just add this path to the image
-      # array
+      
+      if ($pe->mime_type =~ /^image\/jpeg$/ui) {
+        if (($body->path =~ /\.jpg$/ui) or
+              ($body->path =~ /\.jpeg$/ui)) {
+          $file_ok = 1;
+        }
+        
+      } elsif ($pe->mime_type =~ /^image\/png$/ui) {
+        if ($body->path =~ /\.png$/ui) {
+          $file_ok = 1;
+        }
+        
+      } elsif ($pe->mime_type =~ /^image\/svg\+xml$/ui) {
+        if ($body->path =~ /\.svg$/ui) {
+          $file_ok = 1;
+        }
+        
+      } else {
+        die "Unrecognized image type, stopped";
+      }
+    }
+    
+    # Use the disk file as-is if $file_ok flag is set; otherwise, copy
+    # the part into a temporary file with an appropriate extension; this
+    # also works if the MIME part is in-core rather than a disk file
+    if ($file_ok) {
+      # Add the body path to the image array
       push @$iarr, ($body->path);
 
     } else {
-      # Body is not a disk file, so we need to generate a temporary file
-      # in the extra directory, write the data to it, close it, and add
-      # its path to both the image and tfiles array
+      # Generate a temporary file in the extra directory, write the data
+      # to it, close it, and add its path to both the image and tfiles
+      # array, making sure it has the correct extension for the image
+      # type
       my $th;
       my $tpath;
 
-      ($th, $tpath) = tempfile(DIR => $extra_dir);
+      (undef, $tpath) = tempfile(DIR => $extra_dir);
+      $tpath = $tpath . $iext;
+
+      open($th, "> :raw", $tpath) or
+        die "Failed to create temporary file, stopped";
       $body->print($th);
       close($th);
 
