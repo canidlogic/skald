@@ -6,6 +6,9 @@ use warnings FATAL => "utf8";
 # Skald import
 use Skald::Parse;
 
+# Core modules
+use File::Copy;
+
 =head1 NAME
 
 unskald.pl - Unpack a MIME-format Skald file into a Skald Text File
@@ -133,11 +136,61 @@ for my $mk (@mklist) {
   }
 }
 
-# Print a blank line to end the header
+# Rewind and go through full story, printing all entities out with a
+# blank line before them, and also extracting image files
 #
-print "\n";
-
-# @@TODO:
+$sp->rewind;
+my $pic_count = 0;
+while (my $p = $sp->next) {
+    
+  # Segment is array ref, first element is type
+  if ($p->[0] eq 'paragraph') {
+    # Paragraph
+    my $text = $p->[1];
+    print "\n$text\n";
+    
+  } elsif ($p->[0] eq 'chapter') {
+    # Begin chapter
+    my $chapter_name = $p->[1];
+    print "\n@ $chapter_name\n";
+  
+  } elsif ($p->[0] eq 'scene') {
+    # Scene change
+    print "\n#\n";
+  
+  } elsif ($p->[0] eq 'image') {
+    # Image -- get parameters
+    my $img_path = $p->[1];
+    my $img_type = $p->[2];
+    my $caption  = $p->[3];
+    
+    # Increase the picture count
+    $pic_count = $pic_count + 1;
+    
+    # Based on picture count and image type, determine the filename for
+    # the picture in the current directory
+    my $iname;
+    if ($img_type eq 'image/jpeg') {
+        $iname = "pic$pic_count.jpg";
+    
+    } elsif ($img_type eq 'image/png') {
+      $iname = "pic$pic_count.png";
+    
+    } elsif ($img_type eq 'image/svg+xml') {
+      $iname = "pic$pic_count.svg";
+    
+    } else {
+      die "Unrecognized image type, stopped";
+    }
+    
+    # Copy the image file into the current directory
+    copy($img_path, $iname) or
+      die "Failed to copy image file, stopped";
+    
+    # Write the image reference followed immediately by the image path
+    print "\n^ $iname\n> $caption\n";
+  }
+}
 
 =head1 AUTHOR
 
