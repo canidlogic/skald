@@ -366,10 +366,14 @@ sub check_date {
 # All these methods are "get" if they have no parameters or "set" if
 # they have a parameter.  Fault occurs if "get" is used before "set".
 # Some fields that need destructor support can take a scalar that
-# evaluates to false to clean up and undefined.
+# evaluates to false to clean up and undefined.  The "pos" and "io"
+# fields are closely related, see the documentation of those for further
+# information.
 
 # ent parameter, must be a MIME::Entity, or scalar false value to purge
-# disk files and undefine if already defined
+# disk files and undefine if already defined; when undefining or setting
+# a new value, will automatically set the pos field to zero to clear
+# any I/O
 #
 my $ent = sub {
   # Check parameter count
@@ -381,13 +385,25 @@ my $ent = sub {
   (ref($self) and ($self->isa(__PACKAGE__))) or
     die "Wrong self parameter, stopped";
   
-  # Set qualified property name
+  # Set qualified property names
   my $pname = __PACKAGE__ . "::ent";
+  my $p_io  = __PACKAGE__ . "::io";
+  my $p_pos = __PACKAGE__ . "::pos";
 
   # Function depends on if there is a remaining parameter after the
   # shift above
   if ($#_ == 0) {
-    # "Set" so get the parameter value and check whether scalar
+    # "Set" so first clear position to zero (if defined) and close and
+    # undefine I/O channel (if defined)
+    if (exists $self->{$p_io}) {
+      $self->{$p_io}->close;
+      delete $self->{$p_io};
+    }
+    if (exists $self->{$p_pos}) {
+      $self->{$p_pos} = 0;
+    }
+    
+    # Get the new parameter value and check whether scalar
     my $val = shift;
     if (ref($val)) {
       # Reference value, so check type
@@ -570,6 +586,159 @@ my $tfiles = sub {
     
     # Return parameter value
     return $self->{$pname};
+  }
+};
+
+# The "io" parameter only allows "get" and is only available when the
+# "pos" parameter is set to something greater than zero.  In that case,
+# the "io" parameter is an IO::Handle type object that can read from the
+# MIME part.  It will be set to read RAW bytes, so Unicode decoding is
+# needed separately.  Setting the "pos" parameter to a value greater
+# than zero will automatically set this "io" parameter appropriately,
+# and setting the "pos" parameter to a value of zero or -1 will
+# automatically clear this "io" parameter.  Clearing the "ent" parameter
+# or setting it to a new value will also clear this field.  This handle
+# remains valid until the object is destructed, the "ent" is set to a
+# new value, the "ent" is unloaded, or the "pos" is changed (whichever
+# happens first).
+#
+my $io = sub {
+  # Check parameter count
+  ($#_ == 0) or die "Wrong number of parameters, stopped";
+  
+  # Get self parameter and check type
+  my $self = shift;
+  (ref($self) and ($self->isa(__PACKAGE__))) or
+    die "Wrong self parameter, stopped";
+  
+  # Define qualified parameter name
+  my $pname = __PACKAGE__ . "::io";
+  
+  # Field must currently exist
+  (exists $self->{$pname}) or "I/O not currently available, stopped";
+  
+  # Return the field value
+  return $self->{$pname};
+};
+
+# The "pos" parameter can be set to the special value of zero at any
+# time, meaning that any open part should be cleared and the position
+# should return to starting position.  Undefining the "ent" field or
+# setting it to a new value will automatically set the "pos" parameter
+# to zero and clear the I/O handle (if any).
+#
+# For all other integer values, the "ent" field must be set before using
+# this function.  The value -1 means that no I/O is open and we are at
+# an EOF position.  All other values besides the special zero and -1
+# values must be odd numbered AND within the range of MIME part indices
+# established by the "ent" field.  Passing a part number greater than
+# zero has the effect of opening an I/O handle to the part after
+# verifying that the part is text/plain (with optional parameters).
+# This I/O handle can be retrieved with the "io" field.
+#
+# The current value of "pos" can be read at any time, even if it has not
+# been set yet (in which case it is automatically defined with a default
+# value of zero).
+#
+# Note that setting "pos" to its current value may still change things;
+# if the value is greater than zero, this has the effect of closing the
+# current MIME part and then opening it again, starting reading from the
+# beginning with the handle.
+#
+my $pos = sub {
+  # Check parameter count
+  (($#_ == 0) or ($#_ == 1)) or
+    die "Wrong number of parameters, stopped";
+  
+  # Get self parameter and check type
+  my $self = shift;
+  (ref($self) and ($self->isa(__PACKAGE__))) or
+    die "Wrong self parameter, stopped";
+  
+  # Set qualified property names of ent, io, and pos
+  my $p_ent = __PACKAGE__ . "::ent";
+  my $p_io  = __PACKAGE__ . "::io";
+  my $p_pos = __PACKAGE__ . "::pos";
+
+  # Function depends on if there is a remaining parameter after the
+  # shift above
+  if ($#_ == 0) {
+    # "Set" so get the parameter value, verify it's scalar, and convert
+    # to integer
+    my $val = shift;
+    (not ref($val)) or die "Wrong value type, stopped";
+    $val = int($val);
+
+    # Handle the different cases
+    if ($val == 0) {
+      # We can always set the zero value, just be sure to close and
+      # undefine io field if it exists
+      if (exists $self->{$p_io}) {
+        $self->{$p_io}->close;
+        delete $self->{$p_io};
+      }
+      $self->{$p_pos} = 0;
+      
+    } elsif ($val == -1) {
+      # We can only set -1 value if there is an entity loaded
+      (exists $self->{$p_ent}) or
+        die "Can't seek while unloaded, stopped";
+      
+      # Close and undefine io field if it exists
+      if (exists $self->{$p_io}) {
+        $self->{$p_io}->close;
+        delete $self->{$p_io};
+      }
+      
+      # Set the position
+      $self->{$p_pos} = -1;
+      
+    } elsif (($val > 0) and (($val % 2) == 1)) {
+      # We can only set odd values greater than zero if there is an
+      # entity loaded
+      (exists $self->{$p_ent}) or
+        die "Can't seek while unloaded, stopped";
+      
+      # Make sure position value is within range
+      ($val < $self->$ent->parts) or
+        die "Value out of range, stopped";
+      
+      # Get the desired part
+      my $p = $self->$ent->parts($val);
+      
+      # Make sure the part is text/plain (with optional parameters)
+      (($p->mime_type =~ /^text\/plain$/ui) or
+          ($p->mime_type =~ /^text\/plain;/ui)) or
+        die "MIME multipart has wrong sequence, stopped";
+      
+      # Get the body handle
+      $p = $p->bodyhandle;
+      
+      # Close io field if it exists
+      if (exists $self->{$p_io}) {
+        $self->{$p_io}->close;
+      }
+      
+      # Open a handle to the body in binary mode
+      $p->binmode(1);
+      $self->{$p_io} = $p->open("r");
+      
+      # Update position
+      $self->{$p_pos} = $val;
+      
+    } else {
+      die "Value out of range, stopped";
+    }
+    
+  } else {
+    # "Get" so first define the parameter with a default value of zero
+    # if it is not yet defined
+    unless (exists $self->{$p_pos}) {
+      $self->{$p_pos} = 0;
+    }
+
+    # Return parameter value
+    return $self->{$p_pos};
   }
 };
 
@@ -932,7 +1101,7 @@ sub fromStdin {
   # the MIME file, with zero meaning before anything has been read (part
   # one is the first part, part zero is JSON metadata), and -1 meaning
   # EOF and nothing further to read
-  $self->{__PACKAGE__ . "::pos"} = 0;
+  $self->$pos(0);
   
   # Return the new object
   return $self;
@@ -977,7 +1146,7 @@ sub fromPath {
   # the MIME file, with zero meaning before anything has been read (part
   # one is the first part, part zero is JSON metadata), and -1 meaning
   # EOF and nothing further to read
-  $self->{__PACKAGE__ . "::pos"} = 0;
+  $self->$pos(0);
   
   # Return the new object
   return $self;
@@ -996,13 +1165,6 @@ you should invoke this superclass destructor.
 
 sub DESTROY {
   my $self = shift;
-  if ((exists $self->{__PACKAGE__ . "::pos"}) and
-        (exists $self->{__PACKAGE__ . "::io"})) {
-    if ($self->{__PACKAGE__ . "::pos"} > 0) {
-      $self->{__PACKAGE__ . "::io"}->close;
-      $self->{__PACKAGE__ . "::pos"} = 0;
-    }
-  }
   $self->$ent(0);
   $self->$tfiles(0);
 }
@@ -1178,13 +1340,8 @@ sub rewind {
   (ref($self) and ($self->isa(__PACKAGE__))) or
     die "Wrong self parameter, stopped";
   
-  # If there is currently a MIME part open, close it
-  if ($self->{__PACKAGE__ . "::pos"} > 0) {
-    $self->{__PACKAGE__ . "::io"}->close;
-  }
-  
   # Reset to beginning position
-  $self->{__PACKAGE__ . "::pos"} = 0;
+  $self->$pos(0);
 }
 
 =item next
@@ -1245,7 +1402,6 @@ sub next {
     die "Wrong self parameter, stopped";
   
   # Establish basic information
-  my $mpos = $self->{__PACKAGE__ . "::pos"};
   my $skfmt = $self->$format;
   my $result;
   
@@ -1253,27 +1409,14 @@ sub next {
   # empty) or to start of first part; set $begin_story flag if we were
   # originally in BOF state so we know to do start-of-story state checks
   my $begin_story = 0;
-  if ($mpos == 0) {
+  if ($self->$pos == 0) {
     # BOF position, so check whether at least two MIME parts after
     # setting $begin_story flag
     $begin_story = 1;
     my $ent = $self->$ent;
     if ($ent->parts >= 2) {
-      # At least two parts -- get second part
-      my $p = $ent->parts(1);
-      
-      # Second part must be some kind of text/plain
-      ($p->mime_type =~ /^text\/plain/ui) or
-        die "Bad MIME format, stopped";
-      
-      # Set position to second part and open it, using binary mode so
-      # we can manually decode to UTF-8 to make sure all is well
-      $self->{__PACKAGE__ . "::pos"} = 1;
-      $mpos = 1;
-      
-      $p->bodyhandle->binmode(1);
-      my $io = $p->bodyhandle->open("r");
-      $self->{__PACKAGE__ . "::io"} = $io;
+      # At least two parts -- set position to second part
+      $self->$pos(1);
       
     } else {
       # Not at least two parts -- this is only possible in "short"
@@ -1283,28 +1426,27 @@ sub next {
       # Nothing beyond the metadata, so go to EOF position and return
       # undef
       $result = undef;
-      $mpos = -1;
-      $self->{__PACKAGE__ . "::pos"} = -1;
+      $self->$pos(-1);
     }
   }
   
   # We are now either in EOF or non-BOF, non-EOF state, so handle those
   # two possibilities
-  if ($mpos < 0) {
+  if ($self->$pos < 0) {
     # EOF position, so just return undef
     $result = undef;
     
   } else {
     # Neither EOF nor BOF, so read next line from the currently open
     # part and decode to UTF-8
-    my $str = $self->{__PACKAGE__ . "::io"}->getline;
+    my $str = $self->$io->getline;
     $str = decode("UTF-8", $str);
     
     # If line is empty or blank, keep reading until we get something
     # that is neither empty nor blank
     if (defined($str)) {
       while (defined($str) and ($str =~ /^[ \t\r\n]*$/u)) {
-        $str = $self->{__PACKAGE__ . "::io"}->getline;
+        $str = $self->$io->getline;
         $str = decode("UTF-8", $str);
       }
     }
@@ -1322,7 +1464,7 @@ sub next {
       
       # Read all remaining lines in the current MIME segment and make
       # sure they are all blank or empty
-      while ($str = $self->{__PACKAGE__ . "::io"}->getline) {
+      while ($str = $self->$io->getline) {
         $str = decode("UTF-8", $str);
         ($str =~ /^[ \t\r\n]*$/u) or
           die "Nothing allowed in MIME part after caption, stopped";
@@ -1330,10 +1472,10 @@ sub next {
       
       # Make sure there is at least one MIME part after the current and
       # get that part
-      ($mpos + 1 < $self->$ent->parts) or
+      ($self->$pos + 1 < $self->$ent->parts) or
         die "Missing MIME part, stopped";
-      my $img_part = $self->$ent->parts($mpos + 1);
-      
+      my $img_part = $self->$ent->parts($self->$pos + 1);
+
       # Make sure the image part is indeed some kind of image
       ($img_part->mime_type =~ /^image\//ui) or
         die "Missing image, stopped";
@@ -1341,39 +1483,21 @@ sub next {
       # Assemble the result
       $result = [
                   'image',
-                  $self->$image->[$mpos + 1],
+                  $self->$image->[$self->$pos + 1],
                   $img_part->mime_type,
                   $image_cap
                 ];
       
-      # Close I/O channel to MIME part we just finished reading
-      $self->{__PACKAGE__ . "::io"}->close;
-      
       # If there are two or more parts remaining, update position to the
       # next part after the image; else, go to EOF
-      if ($mpos + 2 < $self->$ent->parts) {
+      if ($self->$pos + 2 < $self->$ent->parts) {
         # More remaining, so skip the image part and move to part after
         # that
-        $mpos = $mpos + 2;
-        $self->{__PACKAGE__ . "::pos"} = $mpos;
-        
-        # New part must be some kind of text/plain
-        ($self->$ent->parts($mpos)->mime_type
-            =~ /^text\/plain/ui) or
-          die "Bad MIME format, stopped";
-        
-        # Open the new part for I/O, using binary mode so we can decode
-        # UTF-8 manually to make sure all is well
-        my $new_part =
-          $self->$ent->parts($mpos)->bodyhandle;
-        $new_part->binmode(1);
-        my $io = $new_part->open("r");
-        $self->{__PACKAGE__ . "::io"} = $io;
+        $self->$pos($self->$pos + 2);
         
       } else {
         # Nothing remaining, so EOF
-        $mpos = -1;
-        $self->{__PACKAGE__ . "::pos"} = -1;
+        $self->$pos(-1);
       }
       
     } elsif (defined($str)) {
@@ -1408,14 +1532,12 @@ sub next {
     } else {
       # We hit EOF, so this must be the last part in the MIME message
       # because all image files need to be introduced by a caption
-      ($mpos + 1 == $self->$ent->parts) or
+      ($self->$pos + 1 == $self->$ent->parts) or
         die "MIME format error, stopped";
       
-      # Close the IO channel, set result to undefined, and go to EOF
-      # state
-      $self->{__PACKAGE__ . "::io"}->close;
+      # Set result to undefined and go to EOF state
+      $self->$pos(-1);
       $result = undef;
-      $self->{__PACKAGE__ . "::pos"} = -1;
     }
   }
   
