@@ -4,7 +4,9 @@ Skald is a MIME-based transport format for short story and novel manuscripts tha
 
 The included `skald.pl` utility is able to compile a Skald Text Format (STF) file and any associated illustrations into a single MIME message in the special Skald format.
 
-The included `unskald.pl` utility can unpack the MIME-format Skald message into component files.
+The included `unskald.pl` utility can unpack the MIME-format Skald message into a Skald Text Format (STF) file and a sequence of images.  (See the documentation in the script for further information.)
+
+The `Skald::Parser` module implements a parser for MIME-format Skald messages.  See the documentation of that module for further information.
 
 ## Skald Text Format (STF)
 
