@@ -417,6 +417,43 @@ my $ent = sub {
   }
 };
 
+# format parameter, must be a string equal to 'short' or 'chapter'
+#
+my $format = sub {
+  # Check parameter count
+  (($#_ == 0) or ($#_ == 1)) or
+    die "Wrong number of parameters, stopped";
+  
+  # Get self parameter and check type
+  my $self = shift;
+  (ref($self) and ($self->isa(__PACKAGE__))) or
+    die "Wrong self parameter, stopped";
+
+# Set qualified property name
+  my $pname = __PACKAGE__ . "::format";
+
+  # Function depends on if there is a remaining parameter after the
+  # shift above
+  if ($#_ == 0) {
+    # "Set" so get the parameter value and check type
+    my $val = shift;
+    ((not ref($val)) and
+        (($val eq 'short') or ($val eq 'chapter')))
+      or die "Wrong value type, stopped";
+    
+    # Set the parameter
+    $self->{$pname} = $val;
+    
+  } else {
+    # "Get" so check the parameter has been defined
+    (exists $self->{$pname}) or
+      die "Get before set, stopped";
+    
+    # Return parameter value
+    return $self->{$pname};
+  }
+};
+
 # meta parameter, must be a hash reference
 #
 my $meta = sub {
@@ -515,15 +552,15 @@ my $load_meta = sub {
   
   # Get the format as a string, check value, and set instance data
   # member "format"
-  my $format = $js->{'stf'};
-  (not ref($format)) or
+  my $fmt = $js->{'stf'};
+  (not ref($fmt)) or
     die "Skald JSON syntax error, stopped";
-  $format = "$format";
-  if ($format eq 'short') {
-    $self->{__PACKAGE__ . "::format"} = 'short';
+  $fmt = "$fmt";
+  if ($fmt eq 'short') {
+    $self->$format('short');
     
-  } elsif ($format eq 'chapter') {
-    $self->{__PACKAGE__ . "::format"} = 'chapter';
+  } elsif ($fmt eq 'chapter') {
+    $self->$format('chapter');
     
   } else {
     die "Skald JSON syntax error, stopped";
@@ -911,7 +948,7 @@ sub getFormat {
     die "Wrong self parameter, stopped";
   
   # Return the format parameter value
-  return $self->{__PACKAGE__ . "::format"};
+  return $self->$format;
 }
 
 =item hasMeta(prop_name)
@@ -1127,7 +1164,7 @@ sub next {
   
   # Establish basic information
   my $mpos = $self->{__PACKAGE__ . "::pos"};
-  my $skfmt = $self->{__PACKAGE__ . "::format"};
+  my $skfmt = $self->$format;
   my $result;
   
   # If we are in special BOF state, then transition either to EOF (if
