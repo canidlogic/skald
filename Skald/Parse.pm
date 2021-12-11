@@ -1066,7 +1066,7 @@ my $store_extra = sub {
 
 =over 4
 
-=item fromStdin
+=item B<fromStdin>
 
 Construct a new parser object by reading a Skald MIME transport message
 from standard input.
@@ -1107,7 +1107,7 @@ sub fromStdin {
   return $self;
 }
 
-=item fromPath(path)
+=item B<fromPath>(path)
 
 Construct a new parser object by reading a Skald MIME transport message
 from a file at a given path.
@@ -1173,7 +1173,7 @@ sub DESTROY {
 
 =over 4
 
-=item getFormat
+=item B<getFormat>
 
 Return the format of this Skald message as a string.  This is either the
 string value 'short' or 'chapter' the difference being that 'short'
@@ -1195,7 +1195,7 @@ sub getFormat {
   return $self->$format;
 }
 
-=item hasMeta(prop_name)
+=item B<hasMeta>(prop_name)
 
 Check whether the given property name (case insensitive) was declared in
 the Skald metadata.  Returns 1 if so and 0 if not.
@@ -1229,7 +1229,7 @@ sub hasMeta {
   return $result;
 }
 
-=item getMetaKeys()
+=item B<getMetaKeys>
 
 Return a list (in list context) of all metadata property keys that have
 been defined in this Skald message.  Property names will all be in
@@ -1253,7 +1253,7 @@ sub getMetaKeys {
   return @klist;
 }
 
-=item getMeta(prop_name)
+=item B<getMeta>(prop_name)
 
 Return the value of the given metadata property name (case insensitive)
 from the Skald metadata.  Dies if metadata property not defined; use the
@@ -1323,7 +1323,7 @@ sub getMeta {
   return $pval;
 }
 
-=item rewind
+=item B<rewind>
 
 Rewind the Skald parser object so that it is at the beginning of the
 message once again and the next call to the C<next> method will return
@@ -1344,7 +1344,7 @@ sub rewind {
   $self->$pos(0);
 }
 
-=item next
+=item B<next>
 
 Return the next segment of the story.
 
