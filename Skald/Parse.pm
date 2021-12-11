@@ -454,6 +454,41 @@ my $format = sub {
   }
 };
 
+# image parameter, must be a array reference
+#
+my $image = sub {
+  # Check parameter count
+  (($#_ == 0) or ($#_ == 1)) or
+    die "Wrong number of parameters, stopped";
+  
+  # Get self parameter and check type
+  my $self = shift;
+  (ref($self) and ($self->isa(__PACKAGE__))) or
+    die "Wrong self parameter, stopped";
+
+# Set qualified property name
+  my $pname = __PACKAGE__ . "::image";
+
+  # Function depends on if there is a remaining parameter after the
+  # shift above
+  if ($#_ == 0) {
+    # "Set" so get the parameter value and check type
+    my $val = shift;
+    (ref($val) eq 'ARRAY') or die "Wrong value type, stopped";
+    
+    # Set the parameter
+    $self->{$pname} = $val;
+    
+  } else {
+    # "Get" so check the parameter has been defined
+    (exists $self->{$pname}) or
+      die "Get before set, stopped";
+    
+    # Return parameter value
+    return $self->{$pname};
+  }
+};
+
 # meta parameter, must be a hash reference
 #
 my $meta = sub {
@@ -478,6 +513,55 @@ my $meta = sub {
     
     # Set the parameter
     $self->{$pname} = $val;
+    
+  } else {
+    # "Get" so check the parameter has been defined
+    (exists $self->{$pname}) or
+      die "Get before set, stopped";
+    
+    # Return parameter value
+    return $self->{$pname};
+  }
+};
+
+# tfiles parameter, must be an array reference, or scalar false value to
+# unlink all files in the array and undefine if already defined
+#
+my $tfiles = sub {
+  # Check parameter count
+  (($#_ == 0) or ($#_ == 1)) or
+    die "Wrong number of parameters, stopped";
+  
+  # Get self parameter and check type
+  my $self = shift;
+  (ref($self) and ($self->isa(__PACKAGE__))) or
+    die "Wrong self parameter, stopped";
+  
+  # Set qualified property name
+  my $pname = __PACKAGE__ . "::tfiles";
+
+  # Function depends on if there is a remaining parameter after the
+  # shift above
+  if ($#_ == 0) {
+    # "Set" so get the parameter value and check whether scalar
+    my $val = shift;
+    if (ref($val)) {
+      # Reference value, so check type
+      (ref($val) eq 'ARRAY') or die "Wrong value type, stopped";
+      
+      # Set the parameter
+      $self->{$pname} = $val;
+    
+    } else {
+      # Scalar value so check that false
+      (not $val) or die "Wrong value type, stopped";
+      
+      # Only proceed with clear operation if defined
+      if (exists $self->{$pname}) {
+        unlink(@{$self->{$pname}});
+        delete $self->{$pname};
+      }
+    }
     
   } else {
     # "Get" so check the parameter has been defined
@@ -705,12 +789,12 @@ my $store_extra = sub {
   # The instance field "image" will be a reference to an array that
   # stores the path to each image file part, or an empty string if the
   # corresponding MIME part is not an image
-  $self->{__PACKAGE__ . "::image"} = [];
+  $self->$image([]);
   
   # The instance field "tfiles" will be a reference to an array that
   # stores the paths to any temporary files that were generated during
   # this operation
-  $self->{__PACKAGE__ . "::tfiles"} = [];
+  $self->$tfiles([]);
   
   # Get the parsed entity reference
   my $ent = $self->$ent;
@@ -720,8 +804,8 @@ my $store_extra = sub {
     die "Skald MIME message must be multipart/mixed, stopped";
   
   # Iterate through all MIME parts and build the arrays
-  my $iarr = $self->{__PACKAGE__ . "::image"};
-  my $tarr = $self->{__PACKAGE__ . "::tfiles"};
+  my $iarr = $self->$image;
+  my $tarr = $self->$tfiles;
   for(my $i = 0; $i < $ent->parts; $i++) {
     
     # Get the current part
@@ -920,9 +1004,7 @@ sub DESTROY {
     }
   }
   $self->$ent(0);
-  if (exists $self->{__PACKAGE__ . "::tfiles"}) {
-    unlink(@{$self->{__PACKAGE__ . "::tfiles"}});
-  }
+  $self->$tfiles(0);
 }
 
 =head1 INSTANCE METHODS
@@ -1259,7 +1341,7 @@ sub next {
       # Assemble the result
       $result = [
                   'image',
-                  $self->{__PACKAGE__ . "::image"}->[$mpos + 1],
+                  $self->$image->[$mpos + 1],
                   $img_part->mime_type,
                   $image_cap
                 ];
