@@ -359,6 +359,99 @@ sub check_date {
   return $valid;
 }
 
+# =======================
+# Private field accessors
+# =======================
+
+# All these methods are "get" if they have no parameters or "set" if
+# they have a parameter.  Fault occurs if "get" is used before "set".
+# Some fields that need destructor support can take a scalar that
+# evaluates to false to clean up and undefined.
+
+# ent parameter, must be a MIME::Entity, or scalar false value to purge
+# disk files and undefine if already defined
+#
+my $ent = sub {
+  # Check parameter count
+  (($#_ == 0) or ($#_ == 1)) or
+    die "Wrong number of parameters, stopped";
+  
+  # Get self parameter and check type
+  my $self = shift;
+  (ref($self) and ($self->isa(__PACKAGE__))) or
+    die "Wrong self parameter, stopped";
+  
+  # Set qualified property name
+  my $pname = __PACKAGE__ . "::ent";
+
+  # Function depends on if there is a remaining parameter after the
+  # shift above
+  if ($#_ == 0) {
+    # "Set" so get the parameter value and check whether scalar
+    my $val = shift;
+    if (ref($val)) {
+      # Reference value, so check type
+      ($val->isa('MIME::Entity')) or die "Wrong value type, stopped";
+      
+      # Set the parameter
+      $self->{$pname} = $val;
+    
+    } else {
+      # Scalar value so check that false
+      (not $val) or die "Wrong value type, stopped";
+      
+      # Only proceed with clear operation if defined
+      if (exists $self->{$pname}) {
+        $self->{$pname}->purge;
+        delete $self->{$pname};
+      }
+    }
+    
+  } else {
+    # "Get" so check the parameter has been defined
+    (exists $self->{$pname}) or
+      die "Get before set, stopped";
+    
+    # Return parameter value
+    return $self->{$pname};
+  }
+};
+
+# meta parameter, must be a hash reference
+#
+my $meta = sub {
+  # Check parameter count
+  (($#_ == 0) or ($#_ == 1)) or
+    die "Wrong number of parameters, stopped";
+  
+  # Get self parameter and check type
+  my $self = shift;
+  (ref($self) and ($self->isa(__PACKAGE__))) or
+    die "Wrong self parameter, stopped";
+
+# Set qualified property name
+  my $pname = __PACKAGE__ . "::meta";
+
+  # Function depends on if there is a remaining parameter after the
+  # shift above
+  if ($#_ == 0) {
+    # "Set" so get the parameter value and check type
+    my $val = shift;
+    (ref($val) eq 'HASH') or die "Wrong value type, stopped";
+    
+    # Set the parameter
+    $self->{$pname} = $val;
+    
+  } else {
+    # "Get" so check the parameter has been defined
+    (exists $self->{$pname}) or
+      die "Get before set, stopped";
+    
+    # Return parameter value
+    return $self->{$pname};
+  }
+};
+
 # ========================
 # Private instance methods
 # ========================
@@ -383,10 +476,10 @@ my $load_meta = sub {
   
   # The instance field "meta" will be a reference to a hash that will
   # hold all the metadata fields
-  $self->{__PACKAGE__ . "::meta"} = {};
+  $self->$meta({});
   
   # Get the parsed entity reference
-  my $ent = $self->{__PACKAGE__ . "::ent"};
+  my $ent = $self->$ent;
   
   # Make sure it is a multipart/mixed message
   ($ent->mime_type eq 'multipart/mixed') or
@@ -441,7 +534,7 @@ my $load_meta = sub {
   (ref($js) eq 'HASH') or die "Skald JSON syntax error, stopped";
   
   # Get a reference to our metadata dictionary
-  my $md = $self->{__PACKAGE__ . "::meta"};
+  my $md = $self->$meta;
   
   # Title and unique-URL properties are required
   ((exists $js->{'title'}) and (exists $js->{'unique-url'})) or
@@ -583,7 +676,7 @@ my $store_extra = sub {
   $self->{__PACKAGE__ . "::tfiles"} = [];
   
   # Get the parsed entity reference
-  my $ent = $self->{__PACKAGE__ . "::ent"};
+  my $ent = $self->$ent;
   
   # Make sure it is a multipart/mixed message
   ($ent->mime_type eq 'multipart/mixed') or
@@ -706,7 +799,7 @@ sub fromStdin {
   
   # The instance field "ent" will hold the parsed MIME entity; do the
   # parsing now
-  $self->{__PACKAGE__ . "::ent"} = $mime_parse->parse(\*STDIN);
+  $self->$ent($mime_parse->parse(\*STDIN));
   
   # Load the fields "meta" and "format" from the JSON
   $self->$load_meta;
@@ -751,7 +844,7 @@ sub fromPath {
   
   # The instance field "ent" will hold the parsed MIME entity; do the
   # parsing now
-  $self->{__PACKAGE__ . "::ent"} = $mime_parse->parse_open($path);
+  $self->$ent($mime_parse->parse_open($path));
   
   # Load the fields "meta" and "format" from the JSON
   $self->$load_meta;
@@ -789,9 +882,7 @@ sub DESTROY {
       $self->{__PACKAGE__ . "::pos"} = 0;
     }
   }
-  if (exists $self->{__PACKAGE__ . "::ent"}) {
-    $self->{__PACKAGE__ . "::ent"}->purge;
-  }
+  $self->$ent(0);
   if (exists $self->{__PACKAGE__ . "::tfiles"}) {
     unlink(@{$self->{__PACKAGE__ . "::tfiles"}});
   }
@@ -849,7 +940,7 @@ sub hasMeta {
   
   # Check if property exists in metadata
   my $result = 0;
-  if (exists $self->{__PACKAGE__ . "::meta"}->{$pname}) {
+  if (exists $self->$meta->{$pname}) {
     $result = 1;
   }
   
@@ -875,7 +966,7 @@ sub getMetaKeys {
     die "Wrong self parameter, stopped";
   
   # Get the key list
-  my @klist = keys %{$self->{__PACKAGE__ . "::meta"}};
+  my @klist = keys %{$self->$meta};
   
   # Return the key list
   return @klist;
@@ -919,11 +1010,11 @@ sub getMeta {
   $pname = lc($pname);
   
   # Check that property exists in metadata
-  (exists $self->{__PACKAGE__ . "::meta"}->{$pname}) or
+  (exists $self->$meta->{$pname}) or
     die "Missing metadata property '$pname', stopped";
   
   # Get the property value
-  my $pval = $self->{__PACKAGE__ . "::meta"}->{$pname};
+  my $pval = $self->$meta->{$pname};
   
   # Handle the property value depending on type
   if (($pname eq 'creator') or ($pname eq 'contributor')) {
@@ -1047,7 +1138,7 @@ sub next {
     # BOF position, so check whether at least two MIME parts after
     # setting $begin_story flag
     $begin_story = 1;
-    my $ent = $self->{__PACKAGE__ . "::ent"};
+    my $ent = $self->$ent;
     if ($ent->parts >= 2) {
       # At least two parts -- get second part
       my $p = $ent->parts(1);
@@ -1120,9 +1211,9 @@ sub next {
       
       # Make sure there is at least one MIME part after the current and
       # get that part
-      ($mpos + 1 < $self->{__PACKAGE__ . "::ent"}->parts) or
+      ($mpos + 1 < $self->$ent->parts) or
         die "Missing MIME part, stopped";
-      my $img_part = $self->{__PACKAGE__ . "::ent"}->parts($mpos + 1);
+      my $img_part = $self->$ent->parts($mpos + 1);
       
       # Make sure the image part is indeed some kind of image
       ($img_part->mime_type =~ /^image\//ui) or
@@ -1141,21 +1232,21 @@ sub next {
       
       # If there are two or more parts remaining, update position to the
       # next part after the image; else, go to EOF
-      if ($mpos + 2 < $self->{__PACKAGE__ . "::ent"}->parts) {
+      if ($mpos + 2 < $self->$ent->parts) {
         # More remaining, so skip the image part and move to part after
         # that
         $mpos = $mpos + 2;
         $self->{__PACKAGE__ . "::pos"} = $mpos;
         
         # New part must be some kind of text/plain
-        ($self->{__PACKAGE__ . "::ent"}->parts($mpos)->mime_type
+        ($self->$ent->parts($mpos)->mime_type
             =~ /^text\/plain/ui) or
           die "Bad MIME format, stopped";
         
         # Open the new part for I/O, using binary mode so we can decode
         # UTF-8 manually to make sure all is well
         my $new_part =
-          $self->{__PACKAGE__ . "::ent"}->parts($mpos)->bodyhandle;
+          $self->$ent->parts($mpos)->bodyhandle;
         $new_part->binmode(1);
         my $io = $new_part->open("r");
         $self->{__PACKAGE__ . "::io"} = $io;
@@ -1198,7 +1289,7 @@ sub next {
     } else {
       # We hit EOF, so this must be the last part in the MIME message
       # because all image files need to be introduced by a caption
-      ($mpos + 1 == $self->{__PACKAGE__ . "::ent"}->parts) or
+      ($mpos + 1 == $self->$ent->parts) or
         die "MIME format error, stopped";
       
       # Close the IO channel, set result to undefined, and go to EOF
